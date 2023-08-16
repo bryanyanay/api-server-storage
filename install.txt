@@ -1,0 +1,23 @@
+i followed raiyan's cmds, except i believe i have to use mim to install mmcv
+ - yep
+
+RUN pip install --upgrade pip
+RUN pip install torch torchvision
+RUN pip install mmengine
+RUN pip install -U openmim
+
+mim install "mmcv>=2.0.0rc2"
+
+git clone -b main https://github.com/open-mmlab/mmsegmentation.git
+>>> add our custom config files
+cd mmsegmentation
+pip install -v -e .
+
+pip install mmdeploy
+pip install onnxruntime
+
+git clone -b main https://github.com/open-mmlab/mmdeploy.git
+
+RUN pip install fastapi uvicorn aiofiles python-multipart
+
+pip install google-cloud-storage
