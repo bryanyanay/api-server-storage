@@ -10,6 +10,8 @@ from mmdeploy.utils import get_input_shape, load_config
 import torch
 
 import os
+import io
+from PIL import Image
 import shutil
 import datetime
 
@@ -52,7 +54,7 @@ def segmentImg(curr):
   model_cfg = './mmsegmentation/configs/pspnet/pspnet_r50-d8_80k_foodwaste.py'
   device = 'cpu'
   backend_model = ['./dynamic_dir/onnx/pspnet/end2end.onnx']
-  image = f"images/input_M{curr}"
+  image = f"images/input_M{curr}.png"
 
   deploy_cfg, model_cfg = load_config(deploy_cfg, model_cfg)
   task_processor = build_task_processor(model_cfg, deploy_cfg, device)
@@ -82,18 +84,21 @@ def segmentImg(curr):
 async def handle_post_segment(image: UploadFile, bgTasks: BackgroundTasks):
   curr = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
 
-  inputImg = f"input_M{curr}"
+  inputName = f"input_M{curr}.png"
+  data = await image.read()
+  img = Image.open(io.BytesIO(data))
 
-  async with aiofiles.open("images/" + inputImg, "wb") as f:
-    data = await image.read()
-    await f.write(data)
+  convBuffer = io.BytesIO()
+  img.save(convBuffer, format="png")
+  convData = convBuffer.getvalue()
 
-  # we've saved the img but I need to interpret it as an image
+  async with aiofiles.open("images/" + inputName, "wb") as f:
+    await f.write(convData)
 
   client = storage.Client()
   bucket = client.get_bucket("lila-ai-demo-submitted-images")
-  blob = bucket.blob(inputImg)
-  blob.upload_from_filename("./images/" + inputImg)
+  blob = bucket.blob(inputName)
+  blob.upload_from_filename("./images/" + inputName, content_type="image/png")
   
   segmentImg(curr)
 

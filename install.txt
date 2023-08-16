@@ -21,3 +21,5 @@ git clone -b main https://github.com/open-mmlab/mmdeploy.git
 RUN pip install fastapi uvicorn aiofiles python-multipart
 
 pip install google-cloud-storage
+
+pip install Pillow (oh wait it's apparently already there)
