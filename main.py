@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, BackgroundTasks
+from fastapi import FastAPI, UploadFile, Form
 from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 import aiofiles
@@ -8,6 +8,11 @@ from google.cloud import storage
 from mmdeploy.apis.utils import build_task_processor
 from mmdeploy.utils import get_input_shape, load_config
 import torch
+
+
+from mmengine.model import revert_sync_batchnorm
+from mmseg.apis import inference_model, init_model, show_result_pyplot
+from types import SimpleNamespace
 
 import os
 import io
@@ -45,11 +50,52 @@ def handle_get_segment():
     <h1>Upload new File</h1>
     <form method=post enctype=multipart/form-data> 
       <input type=file name=image>
+      <!--select name=model>
+        <option value=pspnet>PSPnet</option>
+        <option value=segformer>Segformer</option>
+      </select-->
       <input type=submit value=Upload>
     </form>
   """
 
-def segmentImg(curr):
+def segmentImgSEGFORMER(curr):
+  args = {
+    "img": f"images/input_M{curr}.png",
+    "config": "mmsegmentation/configs/segformer/segformer_mit-b0_8xb2-160k_foodwaste-512x512.py",
+    "checkpoint": "segformer.pth",
+    "out_file": f"segformer_result_M{curr}M.png",
+    "device": "cpu",
+    "opacity": 0.5,
+    "title": "result"
+  }
+  args = SimpleNamespace(**args)
+
+  # build the model from a config file and a checkpoint file
+  model = init_model(args.config, args.checkpoint, device=args.device)
+  if args.device == 'cpu':
+      model = revert_sync_batchnorm(model)
+  # test a single image
+  result = inference_model(model, args.img)
+  # show the results
+  show_result_pyplot(
+      model,
+      args.img,
+      result,
+      title=args.title,
+      opacity=args.opacity,
+      draw_gt=False,
+      show=False if args.out_file is not None else True,
+      out_file=args.out_file)
+  
+  client = storage.Client()
+  bucket = client.get_bucket("lila-ai-demo-api-server")
+  blob = bucket.blob(args.out_file)
+  blob.upload_from_filename("./" + args.out_file)
+
+  return args.out_file
+
+
+def segmentImgPSPNET(curr):
   deploy_cfg = './mmdeploy/configs/mmseg/segmentation_onnxruntime_dynamic.py'
   model_cfg = './mmsegmentation/configs/pspnet/pspnet_r50-d8_80k_foodwaste.py'
   device = 'cpu'
@@ -80,9 +126,13 @@ def segmentImg(curr):
   blob = bucket.blob(outputImg)
   blob.upload_from_filename("./" + outputImg)
 
+  return outputImg
+
 @app.post("/segment/")
-async def handle_post_segment(image: UploadFile, bgTasks: BackgroundTasks):
+async def handle_post_segment(image: UploadFile, model: str = Form("pspnet")):
   curr = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
+
+  print(model)
 
   inputName = f"input_M{curr}.png"
   data = await image.read()
@@ -100,10 +150,14 @@ async def handle_post_segment(image: UploadFile, bgTasks: BackgroundTasks):
   blob = bucket.blob(inputName)
   blob.upload_from_filename("./images/" + inputName, content_type="image/png")
   
-  segmentImg(curr)
+  outFile = ""
+  if model == "pspnet":
+    outFile = segmentImgPSPNET(curr)
+  elif model == "segformer":
+    outFile = segmentImgSEGFORMER(curr)
 
   return {"status": "OK",
-          "resultPath": f"/results/result_M{curr}M_0.png"}
+          "resultPath": f"/results/{outFile}"}
 
 @app.get("/results/{img}")
 async def get_image(img: str):
