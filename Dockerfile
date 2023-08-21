@@ -26,6 +26,7 @@ RUN mkdir images
 
 COPY dynamic_dir /app/dynamic_dir
 COPY main.py /app/main.py
+COPY segformer.pth /app/segformer.pth
 
 RUN apt-get update && apt-get -y install libgl1
 
