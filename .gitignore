@@ -3,3 +3,5 @@ __pycache__
 dynamic_dir
 mmdeploy
 mmsegmentation
+segformer.pth
+PSPNet.pth
