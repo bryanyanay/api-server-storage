@@ -152,49 +152,150 @@ def segmentImgPSPNET(curr):
 
   return args.out_file
 
-"""
-def segmentImgPSPNET(curr):
-  deploy_cfg = './mmdeploy/configs/mmseg/segmentation_onnxruntime_dynamic.py'
-  model_cfg = './mmsegmentation/configs/pspnet/pspnet_r50-d8_80k_foodwaste.py'
-  device = 'cpu'
-  backend_model = ['./dynamic_dir/onnx/pspnet/end2end.onnx']
-  image = f"images/input_M{curr}.png"
 
-  deploy_cfg, model_cfg = load_config(deploy_cfg, model_cfg)
-  task_processor = build_task_processor(model_cfg, deploy_cfg, device)
-  model = task_processor.build_backend_model(backend_model)
+def calcColorFrac(image, color):
+  width, height = image.size
+  target_r, target_g, target_b = color
+  matching_pixels = 0
 
-  input_shape = get_input_shape(deploy_cfg)
-  model_inputs, _ = task_processor.create_input(image, input_shape)
+  pixel_data = image.load()  # Load pixel data for faster access
 
-  with torch.no_grad():
-    result = model.test_step(model_inputs)
+  for y in range(height):
+    for x in range(width):
+      pixel_color = pixel_data[x, y]
+      r, g, b, _ = pixel_color  # PNG images have an extra alpha channel
 
-  task_processor.visualize( # for some reason this only saves to static folder on first time, after that it saves to root directory, so we manually move
-    image=image,
-    model=model,
-    result=result[0],
-    window_name='visualize',
-    output_file=f'./result_M{curr}M.png')
+      if r == target_r and g == target_g and b == target_b:
+        matching_pixels += 1
 
-  task_processor.visualize(
-    image=image,
-    model=model,
-    result=result[0],
-    opacity=1,
-    window_name='visualize',
-    output_file=f'./mask.png'
-  )
+  total_pixels = width * height
+  color_fraction = matching_pixels / total_pixels
+  return color_fraction
 
-  # then move the images to google cloud
-  outputImg = f"result_M{curr}M_0.png"
-  client = storage.Client()
-  bucket = client.get_bucket("lila-ai-demo-api-server")
-  blob = bucket.blob(outputImg)
-  blob.upload_from_filename("./" + outputImg)
+def calcNPK():
+  colorMap = {
+    'background': [0, 0, 0],
+    'Banana skin': [255, 255, 0],
+    'Egg shell': [255, 255, 255],
+    'Lettuce leaf': [146, 208, 80],
+    'Hard bread': [131, 60, 12],
+    'Cooked meat': [160, 121, 191],
+    'Onion skin': [183, 123, 104],
+    'Potato skin': [153, 76, 0],
+    'apple core': [255, 0, 0],
+    'Orange': [237, 125, 49],
+    'Waffle': [255, 192, 0],
+    'Apple peel': [192, 0, 0],
+    'Corn leaves': [153, 153, 0],
+    'cucumber': [68, 84, 106],
+    'grape': [153, 0, 153],
+    'Orange skin': [255, 178, 102],
+    'Tea bag': [102, 51, 0],
+    'Avocado skin': [102, 255, 178],
+    'Chicken bone': [102, 102, 0],
+    'Cooked fish': [91, 155, 213]
+  }
+  
+  # in cm
+  thicknessMap = {
+  'Banana skin': 0.5, 
+  'Egg shell': 0.15, 
+  'Lettuce leaf': 1, 
+  'Hard bread': 1.25, 
+  'Cooked meat': 2, 
+  'Onion skin': 0.08, 
+  'Potato skin': 0.12, 
+  'apple core': 3.5, 
+  'Orange': 6, 
+  'Waffle': 1.2, 
+  'Apple peel': 0.15, 
+  'Corn leaves': 0.7, 
+  'cucumber': 2, 
+  'grape': 1.5, 
+  'Orange skin': 0.8, 
+  'Tea bag': 0.6, 
+  'Avocado skin': 0.2, 
+  'Chicken bone': 0.06, 
+  'Cooked fish': 2
+  }
+  
+  # in g/cc
+  densityMap = {
+  'Banana skin': 4.392,
+  'Egg shell': 2.386,
+  'Lettuce leaf': 0.24,
+  'Hard bread': 0.25,
+  'Cooked meat': 1.033,
+  'Onion skin': 0.5,
+  'Potato skin': 0.47,
+  'apple core': 0.53,
+  'Orange': 1.3,
+  'Waffle': 0.9,
+  'Apple peel': 0.4,
+  'Corn leaves': 0.08161,
+  'cucumber': 1,
+  'grape': 0.64,
+  'Orange skin': 0.41,
+  'Tea bag': 0.41,
+  'Avocado skin': 1.035,
+  'Chicken bone': 1.85,
+  'Cooked fish': 0.57
+}
+  
+  # in mg per 100g
+  npkMap = {
+    'Banana skin': [443.75, 100, 420],
+    'Egg shell': [350, 160, 150],
+    'Lettuce leaf': [180, 27, 91],
+    'Hard bread': [1970, 212, 250],
+    'Cooked meat': [3260, 280, 476],
+    'Onion skin': [431.25, 300.36, 161.2],
+    'Potato skin': [3152, 262.2, 287.14],
+    'apple core': [25, 10, 110],
+    'Orange': [50, 22, 159],
+    'Waffle': [375, 381, 177],
+    'Apple peel': [12.5, 12, 257.57],
+    'Corn leaves': [300, 36, 262],
+    'cucumber': [50, 36, 200],
+    'grape': [150, 25, 229],
+    'Orange skin': [93.75, 21, 212],
+    'Tea bag': [4160, 650, 2000],
+    'Avocado skin': [1100, 141, 459],
+    'Chicken bone': [646.875, 2040, 40],
+    'Cooked fish': [1381.25, 252, 384]
+  }
 
-  return outputImg
-"""
+  mask = Image.open("./mask.png")
+  mask = mask.convert("RGBA")
+
+  n = 0
+  p = 0
+  k = 0
+
+  # HANDLE BG CLASS SEPARATELY
+
+  w, h = mask.size
+  area = (100) * ((h/w) * 100) # assuming w is 1m let's say, and we get area in cm^2
+
+  for key in colorMap:
+    if key == "background":
+      continue
+
+    f = calcColorFrac(mask, colorMap[key])
+    volume = area * f * thicknessMap[key] # in cc
+    mass = volume * densityMap[key]
+
+    # print(f"{key} contribution: n - {npkMap[key][0] * (mass/100)}, p - {npkMap[key][1] * (mass/100)}, k - {npkMap[key][2] * (mass/100)}")
+
+    n += npkMap[key][0] * (mass/100)
+    p += npkMap[key][1] * (mass/100)
+    k += npkMap[key][2] * (mass/100)
+
+  p /= n
+  k /= n
+  n /= n # this must b last so that p & k r divided by old n value
+
+  return n, p, k
 
 @app.post("/segment/")
 async def handle_post_segment(image: UploadFile, model: str = Form("pspnet")):
@@ -222,7 +323,12 @@ async def handle_post_segment(image: UploadFile, model: str = Form("pspnet")):
   elif model == "segformer":
     outFile = segmentImgSEGFORMER(curr)
 
+  NPK = calcNPK()
+
   return {"status": "OK",
+          "N": NPK[0],
+          "P": NPK[1],
+          "K": NPK[2],
           "resultPath": f"/results/{outFile}"}
 
 @app.get("/results/{img}")
