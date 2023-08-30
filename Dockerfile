@@ -24,7 +24,7 @@ RUN pip install google-cloud-storage
 # RUN mkdir static
 RUN mkdir images
 
-COPY dynamic_dir /app/dynamic_dir
+# COPY dynamic_dir /app/dynamic_dir
 COPY main.py /app/main.py
 COPY segformer.pth /app/segformer.pth
 COPY PSPNet.pth /app/PSPNet.pth
